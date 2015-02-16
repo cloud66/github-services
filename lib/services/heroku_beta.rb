@@ -1,11 +1,10 @@
 require 'base64'
 
 class Service::HerokuBeta < Service::HttpPost
-  string :name
-  # boolean  :basic_auto_deploy, :status_driven_auto_deploy
+  string :name, :github_api_url
   password :heroku_token, :github_token
 
-  white_list :name
+  white_list :name, :github_api_url
 
   default_events :deployment
 
@@ -23,15 +22,15 @@ class Service::HerokuBeta < Service::HttpPost
   end
 
   def environment
-    payload['environment']
+    payload['deployment']['environment']
   end
 
   def ref
-    payload['ref']
+    payload['deployment']['ref']
   end
 
   def sha
-    payload['sha'][0..7]
+    payload['deployment']['sha'][0..7]
   end
 
   def version_string
@@ -80,13 +79,13 @@ class Service::HerokuBeta < Service::HttpPost
 
     build_id = JSON.parse(response.body)['id']
     deployment_status_options = {
-      "state"       => "pending",
+      "state"       => "success",
       "target_url"  => heroku_build_output_url(build_id),
       "description" => "Created by GitHub Services@#{Service.current_sha[0..7]}"
     }
 
-    deployment_path = "/repos/#{github_repo_path}/deployments/#{payload['id']}/statuses"
-    response = http_post "https://api.github.com#{deployment_path}" do |req|
+    deployment_path = "/repos/#{github_repo_path}/deployments/#{payload['deployment']['id']}/statuses"
+    response = http_post "#{github_api_url}#{deployment_path}" do |req|
       req.headers.merge!(default_github_headers)
       req.body = JSON.dump(deployment_status_options)
     end
@@ -94,7 +93,7 @@ class Service::HerokuBeta < Service::HttpPost
   end
 
   def heroku_build_output_url(id)
-    "https://api.heroku.com/apps/#{heroku_application_name}/builds/#{id}/result"
+    "https://dashboard-next.heroku.com/apps/#{heroku_application_name}/activity/builds/#{id}"
   end
 
   def heroku_app_access?
@@ -129,7 +128,7 @@ class Service::HerokuBeta < Service::HttpPost
   end
 
   def github_get(path)
-    http_get "https://api.github.com#{path}" do |req|
+    http_get "#{github_api_url}#{path}" do |req|
       req.headers.merge!(default_github_headers)
     end
   end
@@ -141,6 +140,14 @@ class Service::HerokuBeta < Service::HttpPost
       'Content-Type'  => "application/json",
       'Authorization' => "token #{required_config_value('github_token')}"
     }
+  end
+
+  def github_api_url
+    if config_value("github_api_url").empty?
+      "https://api.github.com"
+    else
+      config_value("github_api_url")
+    end
   end
 
   def raise_config_error_with_message(sym)

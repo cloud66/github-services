@@ -65,7 +65,7 @@ class Service::YouTrack < Service
     author = nil
 
     #If only distinct commits should be processed, check this
-    return unless commit['distinct'] or !(data['process_distinct'])
+    return unless commit['distinct'] or config_boolean_false?('process_distinct')
 
     commit['message'].split("\n").each { |commit_line|
       issue_id, command = parse_message(commit_line)
@@ -76,7 +76,7 @@ class Service::YouTrack < Service
       author ||= find_user_by_email(commit['author']['email'])
       return if author.nil?
 
-      command = 'Fixed' if command.nil?
+      command = 'comment' if command.nil?
       comment_string = "Commit made by '''" + commit['author']['name'] + "''' on ''" + commit['timestamp'] + "''\n" + commit['url'] + "\n\n{quote}" + commit['message'].to_s + '{quote}'
       execute_command(author, issue_id, command, comment_string)
     }

@@ -26,7 +26,7 @@ class Service::Bugzilla < Service
     bug_commits = sort_commits(commits)
     bugs_to_close = []
     bug_commits.each_pair do | bug, commits |
-      if data['central_repository']
+      if central_repository?
         # Only include first line of message if commit already mentioned
         commit_messages = commits.collect{|c| c.comment(bug_mentions_commit?(bug, c))}
       else
@@ -40,9 +40,13 @@ class Service::Bugzilla < Service
     end
 
     # Close bugs
-    if data['central_repository']
+    if central_repository?
       close_bugs(bugs_to_close)
     end
+  end
+
+  def central_repository?
+    config_boolean_true?('central_repository')
   end
 
   # Name of the branch for this payload; nil if it isn't branch-related.
@@ -62,6 +66,11 @@ class Service::Bugzilla < Service
     # XMLRPC client to communicate with Bugzilla server
     @xmlrpc_client ||= begin
       client = XMLRPC::Client.new2("#{data['server_url'].to_s}/xmlrpc.cgi")
+
+      # Workaround for XMLRPC bug - https://bugs.ruby-lang.org/issues/8182
+      # Should no longer be needed when we start running Ruby 2.2
+      client.http_header_extra = {"accept-encoding" => "identity"}
+
       result = client.call('User.login', {'login' => data['username'].to_s, 'password' => data['password'].to_s})
       @token = result['token']
       client
